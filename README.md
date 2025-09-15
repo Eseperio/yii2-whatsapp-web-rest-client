@@ -12,7 +12,9 @@ This library provides a comprehensive Yii2 module and component for interacting 
 - **Contact Management**: Block/unblock contacts, get contact information
 - **Message Operations**: Reply, react, delete, and download message media
 - **Chat Features**: Typing indicators, read receipts, chat management
+- **Room Management**: List and filter chats/rooms with advanced filtering options
 - **Media Support**: Send images, videos, audio, documents from URLs or base64 data
+- **Caching Support**: Configurable caching for improved performance
 - **Configurable**: Enable/disable specific features through module configuration
 - **Error Handling**: Comprehensive exception handling and response models
 
@@ -54,6 +56,10 @@ Add the module to your Yii2 application config:
             'defaultSessionId' => 'default',
             'timeout' => 30,
         ],
+        // Caching configuration (optional)
+        'enableCache' => true, // Enable caching for better performance
+        'cacheComponent' => 'cache', // Cache component name
+        'cacheDuration' => 300, // Cache duration in seconds (5 minutes)
     ],
 ],
 ```
@@ -243,6 +249,39 @@ foreach ($chats->getResult() as $chat) {
 }
 ```
 
+### Room Management
+
+```php
+$whatsapp = Yii::$app->getModule('whatsapp')->whatsappClient;
+
+// Get all chats with filtering support
+$chats = $whatsapp->getChats();
+foreach ($chats->getResult() as $chat) {
+    echo $chat['name'] . " - " . $chat['lastMessage']['body'] . "\n";
+}
+
+// Use the Room Controller for advanced filtering
+use eseperio\whatsapp\controllers\RoomController;
+
+$module = Yii::$app->getModule('whatsapp');
+$controller = new RoomController('room', $module);
+
+// Get all rooms
+$allRooms = $controller->actionList('my-session');
+
+// Get only group chats with new messages
+Yii::$app->request->setQueryParams([
+    'isGroup' => 1,
+    'hasNewMessages' => 1
+]);
+$filteredRooms = $controller->actionIndex('my-session');
+
+// Search rooms by name
+Yii::$app->request->setQueryParams(['name' => 'family']);
+$searchResults = $controller->actionIndex('my-session');
+}
+```
+
 ### Error Handling
 
 ```php
@@ -356,6 +395,12 @@ if ($response->isSuccessful()) {
     echo $response->statusCode;
 }
 ```
+
+## Documentation
+
+- [Room Management and Caching Guide](ROOM_MANAGEMENT.md) - Detailed guide for the new room management features and caching capabilities
+- [avoylenko/wwebjs-api documentation](https://github.com/avoylenko/wwebjs-api) - API details
+- [whatsapp-web.js documentation](https://docs.wwebjs.dev/) - WhatsApp Web concepts
 
 ## License
 

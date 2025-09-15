@@ -6,6 +6,8 @@ use yii\base\Component;
 use yii\base\InvalidConfigException;
 use yii\httpclient\Client;
 use yii\httpclient\Response;
+use yii\caching\CacheInterface;
+use Yii;
 use eseperio\whatsapp\exceptions\WhatsAppException;
 use eseperio\whatsapp\models\ApiResponse;
 
@@ -39,6 +41,21 @@ class WhatsAppClient extends Component
      * @var int Request timeout in seconds
      */
     public $timeout = 30;
+
+    /**
+     * @var bool Enable/disable caching for API requests
+     */
+    public $enableCache = false;
+
+    /**
+     * @var string Name of the cache component to use
+     */
+    public $cacheComponent = 'cache';
+
+    /**
+     * @var int Cache duration in seconds (default: 5 minutes)
+     */
+    public $cacheDuration = 300;
 
     /**
      * @var Client HTTP client instance
@@ -76,6 +93,79 @@ class WhatsAppClient extends Component
     }
 
     /**
+     * Get cache component instance
+     * 
+     * @return CacheInterface|null
+     */
+    protected function getCache()
+    {
+        if (!$this->enableCache) {
+            return null;
+        }
+        
+        try {
+            return Yii::$app->get($this->cacheComponent);
+        } catch (\Exception $e) {
+            Yii::warning("Cache component '{$this->cacheComponent}' not found: " . $e->getMessage(), __CLASS__);
+            return null;
+        }
+    }
+
+    /**
+     * Generate cache key for request
+     * 
+     * @param string $method HTTP method
+     * @param string $endpoint API endpoint
+     * @param array $data Request data
+     * @param string|null $sessionId Session ID
+     * @return string
+     */
+    protected function generateCacheKey($method, $endpoint, $data = [], $sessionId = null)
+    {
+        $key = sprintf(
+            'whatsapp_api_%s_%s_%s_%s',
+            $method,
+            str_replace(['/', '{', '}'], ['_', '', ''], $endpoint),
+            $sessionId ?: $this->defaultSessionId,
+            md5(serialize($data))
+        );
+        
+        return $key;
+    }
+
+    /**
+     * Check if request should be cached
+     * 
+     * @param string $method HTTP method
+     * @param string $endpoint API endpoint
+     * @return bool
+     */
+    protected function shouldCache($method, $endpoint)
+    {
+        // Only cache GET requests for specific endpoints
+        if (strtoupper($method) !== 'GET') {
+            return false;
+        }
+        
+        $cacheableEndpoints = [
+            '/client/getContacts',
+            '/client/getChats',
+            '/session/status',
+            '/client/getState',
+            '/client/getClassInfo',
+            '/client/getWWebVersion'
+        ];
+        
+        foreach ($cacheableEndpoints as $cacheableEndpoint) {
+            if (strpos($endpoint, $cacheableEndpoint) !== false) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    /**
      * Make an API request
      * 
      * @param string $method HTTP method (GET, POST, etc.)
@@ -93,6 +183,19 @@ class WhatsAppClient extends Component
 
         // Replace {sessionId} placeholder in endpoint
         $endpoint = str_replace('{sessionId}', $sessionId, $endpoint);
+
+        // Check cache first
+        $cache = $this->getCache();
+        $cacheKey = null;
+        
+        if ($cache && $this->shouldCache($method, $endpoint)) {
+            $cacheKey = $this->generateCacheKey($method, $endpoint, $data, $sessionId);
+            $cachedResponse = $cache->get($cacheKey);
+            
+            if ($cachedResponse !== false) {
+                return $cachedResponse;
+            }
+        }
 
         try {
             $request = $this->_httpClient->createRequest()
@@ -113,12 +216,19 @@ class WhatsAppClient extends Component
 
             $response = $request->send();
 
-            return new ApiResponse([
+            $apiResponse = new ApiResponse([
                 'success' => $response->isOk,
                 'statusCode' => $response->statusCode,
                 'data' => $response->data,
                 'rawResponse' => $response,
             ]);
+
+            // Cache successful responses
+            if ($cache && $cacheKey && $apiResponse->isSuccessful()) {
+                $cache->set($cacheKey, $apiResponse, $this->cacheDuration);
+            }
+
+            return $apiResponse;
 
         } catch (\Exception $e) {
             throw new WhatsAppException('API request failed: ' . $e->getMessage(), 0, $e);

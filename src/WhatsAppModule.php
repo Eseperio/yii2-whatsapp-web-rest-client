@@ -51,6 +51,21 @@ class WhatsAppModule extends Module
     public $enableMedia = true;
 
     /**
+     * @var bool Enable/disable caching for API requests
+     */
+    public $enableCache = false;
+
+    /**
+     * @var string Name of the cache component to use
+     */
+    public $cacheComponent = 'cache';
+
+    /**
+     * @var int Cache duration in seconds (default: 5 minutes)
+     */
+    public $cacheDuration = 300;
+
+    /**
      * @var array Component configuration for whatsappClient
      */
     public $whatsappClientConfig = [
@@ -67,6 +82,13 @@ class WhatsAppModule extends Module
     public function init()
     {
         parent::init();
+
+        // Pass cache configuration to the WhatsApp client
+        if ($this->enableCache) {
+            $this->whatsappClientConfig['enableCache'] = $this->enableCache;
+            $this->whatsappClientConfig['cacheComponent'] = $this->cacheComponent;
+            $this->whatsappClientConfig['cacheDuration'] = $this->cacheDuration;
+        }
 
         // Register the WhatsApp client component
         $this->setComponents([
