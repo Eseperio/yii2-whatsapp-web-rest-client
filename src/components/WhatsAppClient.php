@@ -8,6 +8,8 @@ use yii\httpclient\Client;
 use yii\httpclient\Response;
 use eseperio\whatsapp\exceptions\WhatsAppException;
 use eseperio\whatsapp\models\ApiResponse;
+use eseperio\whatsapp\traits\MessageHelperTrait;
+use eseperio\whatsapp\traits\ValidationHelperTrait;
 
 /**
  * WhatsApp Client Component
@@ -20,6 +22,8 @@ use eseperio\whatsapp\models\ApiResponse;
  */
 class WhatsAppClient extends Component
 {
+    use MessageHelperTrait;
+    use ValidationHelperTrait;
     /**
      * @var string Base URL of the WhatsApp Web REST API
      */
@@ -359,9 +363,53 @@ class WhatsAppClient extends Component
      * @param array $options Send options
      * @param string|null $sessionId Session ID
      * @return ApiResponse
+     * @throws WhatsAppException
      */
     public function sendMessage($chatId, $contentType, $content, $options = [], $sessionId = null)
     {
+        // Validate inputs
+        if (empty($chatId)) {
+            throw new WhatsAppException('Chat ID cannot be empty');
+        }
+
+        // Validate content based on type
+        switch ($contentType) {
+            case 'string':
+                if (!is_string($content) || empty(trim($content))) {
+                    throw new WhatsAppException('Message content cannot be empty for text messages');
+                }
+                $content = $this->sanitizeMessageText($content);
+                break;
+                
+            case 'MessageMedia':
+                if (!$this->isValidMediaData($content)) {
+                    throw new WhatsAppException('Invalid media data provided');
+                }
+                break;
+                
+            case 'MessageMediaFromURL':
+                if (!$this->isValidUrl($content)) {
+                    throw new WhatsAppException('Invalid URL provided for media');
+                }
+                break;
+                
+            case 'Location':
+                if (!is_array($content) || 
+                    !isset($content['latitude'], $content['longitude']) ||
+                    !$this->isValidCoordinates($content['latitude'], $content['longitude'])) {
+                    throw new WhatsAppException('Invalid location coordinates provided');
+                }
+                break;
+                
+            case 'Poll':
+                if (!is_array($content) || 
+                    !isset($content['pollName'], $content['pollOptions']) ||
+                    !$this->isValidPollOptions($content['pollOptions'])) {
+                    throw new WhatsAppException('Invalid poll data provided');
+                }
+                break;
+        }
+
         return $this->makeRequest('POST', '/client/sendMessage/{sessionId}', [
             'chatId' => $chatId,
             'contentType' => $contentType,
