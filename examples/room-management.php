@@ -55,7 +55,8 @@ try {
         
         foreach ($result['data'] as $room) {
             echo "- {$room['name']} ({$room['unreadCount']} unread messages)\n";
-            echo "  Last message: {$room['lastMessage']['body'] ?? 'No message'}\n";
+            $lastMessage = isset($room['lastMessage']['body']) ? $room['lastMessage']['body'] : 'No message';
+            echo "  Last message: {$lastMessage}\n";
         }
     } else {
         echo "Error: {$result['error']}\n";
