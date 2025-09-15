@@ -34,9 +34,29 @@ composer require eseperio/yii2-whatsapp-web-rest-client
 
 ## Setup
 
-### 1. Configure the Module
+### 1. Configure the Component
 
-Add the module to your Yii2 application config:
+Add the WhatsAppClient as a main application component to your Yii2 application config:
+
+```php
+'components' => [
+    'whatsapp' => [
+        'class' => 'eseperio\whatsapp\components\WhatsAppClient',
+        'baseUrl' => 'http://localhost:3000', // Your wwebjs-api URL
+        'apiKey' => 'your-api-key', // Optional API key
+        'defaultSessionId' => 'default',
+        'timeout' => 30,
+        // Caching configuration (optional)
+        'enableCache' => true, // Enable caching for better performance
+        'cacheComponent' => 'cache', // Cache component name
+        'cacheDuration' => 300, // Cache duration in seconds (5 minutes)
+    ],
+],
+```
+
+### Alternative: Module Configuration (deprecated)
+
+You can still use the module configuration for backward compatibility, but it's recommended to use the main component configuration above:
 
 ```php
 'modules' => [
@@ -82,7 +102,7 @@ docker run -d \
 
 ```php
 // Get the WhatsApp client component
-$whatsapp = Yii::$app->getModule('whatsapp')->whatsappClient;
+$whatsapp = Yii::$app->whatsapp;
 
 // Start a session
 $response = $whatsapp->startSession('my-session');
@@ -102,7 +122,7 @@ echo "Session state: " . $status->get('state') . "\n";
 ### Sending Messages
 
 ```php
-$whatsapp = Yii::$app->getModule('whatsapp')->whatsappClient;
+$whatsapp = Yii::$app->whatsapp;
 
 // Send text message
 $response = $whatsapp->sendTextMessage(
@@ -139,7 +159,7 @@ $response = $whatsapp->sendPollMessage(
 ### Group Management
 
 ```php
-$whatsapp = Yii::$app->getModule('whatsapp')->whatsappClient;
+$whatsapp = Yii::$app->whatsapp;
 
 // Create a group
 $response = $whatsapp->createGroup(
@@ -167,7 +187,7 @@ echo "Invite link: https://chat.whatsapp.com/" . $inviteResponse->getResult();
 ### Contact Management
 
 ```php
-$whatsapp = Yii::$app->getModule('whatsapp')->whatsappClient;
+$whatsapp = Yii::$app->whatsapp;
 
 // Get all contacts
 $contacts = $whatsapp->getContacts();
@@ -192,7 +212,7 @@ echo "Profile picture URL: " . $profilePic->getResult();
 ### Message Operations
 
 ```php
-$whatsapp = Yii::$app->getModule('whatsapp')->whatsappClient;
+$whatsapp = Yii::$app->whatsapp;
 
 // Reply to a message
 $response = $whatsapp->replyToMessage(
@@ -228,7 +248,7 @@ if ($media->isSuccessful()) {
 ### Chat Features
 
 ```php
-$whatsapp = Yii::$app->getModule('whatsapp')->whatsappClient;
+$whatsapp = Yii::$app->whatsapp;
 
 // Send typing indicator
 $whatsapp->sendTyping('1234567890@c.us');
@@ -252,7 +272,7 @@ foreach ($chats->getResult() as $chat) {
 ### Room Management
 
 ```php
-$whatsapp = Yii::$app->getModule('whatsapp')->whatsappClient;
+$whatsapp = Yii::$app->whatsapp;
 
 // Get all chats with filtering support
 $chats = $whatsapp->getChats();
@@ -260,7 +280,7 @@ foreach ($chats->getResult() as $chat) {
     echo $chat['name'] . " - " . $chat['lastMessage']['body'] . "\n";
 }
 
-// Use the Room Controller for advanced filtering
+// Use the Room Controller for advanced filtering (when using module configuration)
 use eseperio\whatsapp\controllers\RoomController;
 
 $module = Yii::$app->getModule('whatsapp');
@@ -287,7 +307,7 @@ $searchResults = $controller->actionIndex('my-session');
 ```php
 use eseperio\whatsapp\exceptions\WhatsAppException;
 
-$whatsapp = Yii::$app->getModule('whatsapp')->whatsappClient;
+$whatsapp = Yii::$app->whatsapp;
 
 try {
     $response = $whatsapp->sendTextMessage('invalid-chat-id', 'Hello');
@@ -303,7 +323,34 @@ try {
 
 ## Configuration Options
 
-### Module Configuration
+### Main Component Configuration (Recommended)
+
+```php
+'components' => [
+    'whatsapp' => [
+        'class' => 'eseperio\whatsapp\components\WhatsAppClient',
+        
+        // Base URL of your wwebjs-api container
+        'baseUrl' => 'http://localhost:3000',
+        
+        // API key for authentication (optional, set in wwebjs-api container)
+        'apiKey' => null, // or 'your-api-key'
+        
+        // Default session ID to use when none specified
+        'defaultSessionId' => 'default',
+        
+        // Request timeout in seconds
+        'timeout' => 30,
+        
+        // Caching configuration (optional)
+        'enableCache' => true,        // Enable caching for better performance
+        'cacheComponent' => 'cache',  // Cache component name
+        'cacheDuration' => 300,       // Cache duration in seconds (5 minutes)
+    ],
+],
+```
+
+### Module Configuration (Backward Compatibility)
 
 ```php
 'modules' => [
@@ -350,7 +397,7 @@ You can also configure the component directly:
 The library provides comprehensive session management:
 
 ```php
-$whatsapp = Yii::$app->getModule('whatsapp')->whatsappClient;
+$whatsapp = Yii::$app->whatsapp;
 
 // Start session
 $whatsapp->startSession('session-1');

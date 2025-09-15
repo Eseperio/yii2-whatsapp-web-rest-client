@@ -8,7 +8,7 @@
 use eseperio\whatsapp\exceptions\WhatsAppException;
 
 // Get the WhatsApp client component
-$whatsapp = Yii::$app->getModule('whatsapp')->whatsappClient;
+$whatsapp = Yii::$app->whatsapp;
 
 try {
     // 1. Start a session
