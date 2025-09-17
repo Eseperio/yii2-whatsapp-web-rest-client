@@ -214,7 +214,6 @@ class WhatsAppClient extends Component
             }
 
             $response = $request->send();
-            $response->setFormat(Client::FORMAT_JSON);
             $apiResponse = new ApiResponse([
                 'success' => $response->isOk,
                 'statusCode' => $response->statusCode,
@@ -315,14 +314,44 @@ class WhatsAppClient extends Component
     }
 
     /**
-     * Get QR code as image
+     * Get QR code as image (PNG binario)
+     *
+     * data contendrá el binario de la imagen PNG. Si necesitas
+     * transportarlo como texto puedes hacer base64_encode($response->data).
      *
      * @param string|null $sessionId Session ID
      * @return ApiResponse
+     * @throws WhatsAppException
      */
     public function getSessionQrImage($sessionId = null)
     {
-        return $this->makeRequest('GET', '/session/qr/{sessionId}/image', [], $sessionId);
+        if ($sessionId === null) {
+            $sessionId = $this->defaultSessionId;
+        }
+        $endpoint = str_replace('{sessionId}', $sessionId, '/session/qr/{sessionId}/image');
+
+        try {
+            $request = $this->_httpClient->createRequest()
+                ->setMethod('GET')
+                // No setFormat(JSON) para permitir binario
+                ->setUrl($this->baseUrl . $endpoint)
+                ->setOptions(['timeout' => $this->timeout]);
+
+            if ($this->apiKey !== null) {
+                $request->addHeaders(['x-api-key' => $this->apiKey]);
+            }
+
+            $response = $request->send();
+
+            return new ApiResponse([
+                'success' => $response->isOk,
+                'statusCode' => $response->statusCode,
+                'data' => $response->content, // PNG binary
+                'rawResponse' => $response,
+            ]);
+        } catch (\Throwable $e) {
+            throw new WhatsAppException('API request failed: ' . $e->getMessage(), 0, $e);
+        }
     }
 
     /**
