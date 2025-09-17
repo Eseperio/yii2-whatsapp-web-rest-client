@@ -2,21 +2,20 @@
 
 namespace eseperio\whatsapp\components;
 
-use yii\base\Component;
-use yii\base\InvalidConfigException;
-use yii\httpclient\Client;
-use yii\httpclient\Response;
-use yii\caching\CacheInterface;
-use Yii;
 use eseperio\whatsapp\exceptions\WhatsAppException;
 use eseperio\whatsapp\models\ApiResponse;
+use Yii;
+use yii\base\Component;
+use yii\base\InvalidConfigException;
+use yii\caching\CacheInterface;
+use yii\httpclient\Client;
 
 /**
  * WhatsApp Client Component
- * 
+ *
  * Main component for interacting with the WhatsApp Web REST API
  * through the avoylenko/wwebjs-api docker container.
- * 
+ *
  * @author E.Alamo
  * @package eseperio\whatsapp\components
  */
@@ -72,19 +71,17 @@ class WhatsAppClient extends Component
         if (empty($this->baseUrl)) {
             throw new InvalidConfigException('The "baseUrl" property must be set.');
         }
+        if (empty($this->apiKey)) {
+            throw new InvalidConfigException('The "apiKey" property must be set.');
+        }
 
-        // Initialize HTTP client
-        $this->_httpClient = new Client([
-            'baseUrl' => $this->baseUrl,
-            'requestConfig' => [
-                'timeout' => $this->timeout,
-            ],
-        ]);
+        // Inicializar sin baseUrl ni timeout (se aplican por request)
+        $this->_httpClient = new Client();
     }
 
     /**
      * Get the HTTP client instance
-     * 
+     *
      * @return Client
      */
     public function getHttpClient()
@@ -94,7 +91,7 @@ class WhatsAppClient extends Component
 
     /**
      * Get cache component instance
-     * 
+     *
      * @return CacheInterface|null
      */
     protected function getCache()
@@ -102,7 +99,7 @@ class WhatsAppClient extends Component
         if (!$this->enableCache) {
             return null;
         }
-        
+
         try {
             return Yii::$app->get($this->cacheComponent);
         } catch (\Exception $e) {
@@ -113,7 +110,7 @@ class WhatsAppClient extends Component
 
     /**
      * Generate cache key for request
-     * 
+     *
      * @param string $method HTTP method
      * @param string $endpoint API endpoint
      * @param array $data Request data
@@ -129,13 +126,13 @@ class WhatsAppClient extends Component
             $sessionId ?: $this->defaultSessionId,
             md5(serialize($data))
         );
-        
+
         return $key;
     }
 
     /**
      * Check if request should be cached
-     * 
+     *
      * @param string $method HTTP method
      * @param string $endpoint API endpoint
      * @return bool
@@ -146,7 +143,7 @@ class WhatsAppClient extends Component
         if (strtoupper($method) !== 'GET') {
             return false;
         }
-        
+
         $cacheableEndpoints = [
             '/client/getContacts',
             '/client/getChats',
@@ -155,19 +152,19 @@ class WhatsAppClient extends Component
             '/client/getClassInfo',
             '/client/getWWebVersion'
         ];
-        
+
         foreach ($cacheableEndpoints as $cacheableEndpoint) {
             if (strpos($endpoint, $cacheableEndpoint) !== false) {
                 return true;
             }
         }
-        
+
         return false;
     }
 
     /**
      * Make an API request
-     * 
+     *
      * @param string $method HTTP method (GET, POST, etc.)
      * @param string $endpoint API endpoint
      * @param array $data Request data
@@ -187,11 +184,11 @@ class WhatsAppClient extends Component
         // Check cache first
         $cache = $this->getCache();
         $cacheKey = null;
-        
+
         if ($cache && $this->shouldCache($method, $endpoint)) {
             $cacheKey = $this->generateCacheKey($method, $endpoint, $data, $sessionId);
             $cachedResponse = $cache->get($cacheKey);
-            
+
             if ($cachedResponse !== false) {
                 return $cachedResponse;
             }
@@ -199,8 +196,10 @@ class WhatsAppClient extends Component
 
         try {
             $request = $this->_httpClient->createRequest()
+                ->setFormat(Client::FORMAT_JSON)
                 ->setMethod($method)
-                ->setUrl($endpoint);
+                ->setUrl($this->baseUrl . $endpoint)
+                ->setOptions(['timeout' => $this->timeout]);
 
             // Add API key header if configured
             if ($this->apiKey !== null) {
@@ -215,7 +214,7 @@ class WhatsAppClient extends Component
             }
 
             $response = $request->send();
-
+            $response->setFormat(Client::FORMAT_JSON);
             $apiResponse = new ApiResponse([
                 'success' => $response->isOk,
                 'statusCode' => $response->statusCode,
@@ -223,21 +222,23 @@ class WhatsAppClient extends Component
                 'rawResponse' => $response,
             ]);
 
-            // Cache successful responses
-            if ($cache && $cacheKey && $apiResponse->isSuccessful()) {
+            if ($cache && $cacheKey) {
                 $cache->set($cacheKey, $apiResponse, $this->cacheDuration);
             }
 
             return $apiResponse;
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            if (isset($cache) && $cache && isset($cacheKey) && $cacheKey) {
+                $cache->delete($cacheKey);
+            }
             throw new WhatsAppException('API request failed: ' . $e->getMessage(), 0, $e);
         }
     }
 
     /**
      * Health check - ping the API
-     * 
+     *
      * @return ApiResponse
      */
     public function ping()
@@ -249,7 +250,7 @@ class WhatsAppClient extends Component
 
     /**
      * Start a new session
-     * 
+     *
      * @param string|null $sessionId Session ID
      * @return ApiResponse
      */
@@ -260,7 +261,7 @@ class WhatsAppClient extends Component
 
     /**
      * Stop a session
-     * 
+     *
      * @param string|null $sessionId Session ID
      * @return ApiResponse
      */
@@ -271,7 +272,7 @@ class WhatsAppClient extends Component
 
     /**
      * Get session status
-     * 
+     *
      * @param string|null $sessionId Session ID
      * @return ApiResponse
      */
@@ -282,7 +283,7 @@ class WhatsAppClient extends Component
 
     /**
      * Restart a session
-     * 
+     *
      * @param string|null $sessionId Session ID
      * @return ApiResponse
      */
@@ -293,7 +294,7 @@ class WhatsAppClient extends Component
 
     /**
      * Terminate a session
-     * 
+     *
      * @param string|null $sessionId Session ID
      * @return ApiResponse
      */
@@ -304,7 +305,7 @@ class WhatsAppClient extends Component
 
     /**
      * Get QR code for session authentication
-     * 
+     *
      * @param string|null $sessionId Session ID
      * @return ApiResponse
      */
@@ -315,7 +316,7 @@ class WhatsAppClient extends Component
 
     /**
      * Get QR code as image
-     * 
+     *
      * @param string|null $sessionId Session ID
      * @return ApiResponse
      */
@@ -326,7 +327,7 @@ class WhatsAppClient extends Component
 
     /**
      * Get all sessions
-     * 
+     *
      * @return ApiResponse
      */
     public function getSessions()
@@ -338,7 +339,7 @@ class WhatsAppClient extends Component
 
     /**
      * Get client state
-     * 
+     *
      * @param string|null $sessionId Session ID
      * @return ApiResponse
      */
@@ -349,7 +350,7 @@ class WhatsAppClient extends Component
 
     /**
      * Get client class information
-     * 
+     *
      * @param string|null $sessionId Session ID
      * @return ApiResponse
      */
@@ -360,7 +361,7 @@ class WhatsAppClient extends Component
 
     /**
      * Get WhatsApp Web version
-     * 
+     *
      * @param string|null $sessionId Session ID
      * @return ApiResponse
      */
@@ -373,7 +374,7 @@ class WhatsAppClient extends Component
 
     /**
      * Get all contacts
-     * 
+     *
      * @param string|null $sessionId Session ID
      * @return ApiResponse
      */
@@ -384,7 +385,7 @@ class WhatsAppClient extends Component
 
     /**
      * Get contact by ID
-     * 
+     *
      * @param string $contactId Contact ID
      * @param string|null $sessionId Session ID
      * @return ApiResponse
@@ -398,7 +399,7 @@ class WhatsAppClient extends Component
 
     /**
      * Check if number is registered on WhatsApp
-     * 
+     *
      * @param string $number Phone number
      * @param string|null $sessionId Session ID
      * @return ApiResponse
@@ -412,7 +413,7 @@ class WhatsAppClient extends Component
 
     /**
      * Get profile picture URL for a contact
-     * 
+     *
      * @param string $contactId Contact ID
      * @param string|null $sessionId Session ID
      * @return ApiResponse
@@ -428,7 +429,7 @@ class WhatsAppClient extends Component
 
     /**
      * Get all chats
-     * 
+     *
      * @param array $searchOptions Optional search options
      * @param string|null $sessionId Session ID
      * @return ApiResponse
@@ -446,7 +447,7 @@ class WhatsAppClient extends Component
 
     /**
      * Get chat by ID
-     * 
+     *
      * @param string $chatId Chat ID
      * @param string|null $sessionId Session ID
      * @return ApiResponse
@@ -462,7 +463,7 @@ class WhatsAppClient extends Component
 
     /**
      * Send a message
-     * 
+     *
      * @param string $chatId Chat ID
      * @param string $contentType Content type (string, MessageMedia, etc.)
      * @param mixed $content Message content
@@ -482,7 +483,7 @@ class WhatsAppClient extends Component
 
     /**
      * Send a text message
-     * 
+     *
      * @param string $chatId Chat ID
      * @param string $text Message text
      * @param array $options Send options
@@ -496,7 +497,7 @@ class WhatsAppClient extends Component
 
     /**
      * Send media message
-     * 
+     *
      * @param string $chatId Chat ID
      * @param array $mediaData Media data with mimetype, data, and optional filename
      * @param array $options Send options
@@ -510,7 +511,7 @@ class WhatsAppClient extends Component
 
     /**
      * Send media from URL
-     * 
+     *
      * @param string $chatId Chat ID
      * @param string $url Media URL
      * @param array $options Send options
@@ -524,7 +525,7 @@ class WhatsAppClient extends Component
 
     /**
      * Mark chat as seen
-     * 
+     *
      * @param string $chatId Chat ID
      * @param string|null $sessionId Session ID
      * @return ApiResponse
@@ -540,7 +541,7 @@ class WhatsAppClient extends Component
 
     /**
      * Create a new group
-     * 
+     *
      * @param string $title Group title
      * @param array $participants Array of participant IDs
      * @param array $options Group creation options
@@ -558,7 +559,7 @@ class WhatsAppClient extends Component
 
     /**
      * Get group invite code
-     * 
+     *
      * @param string $chatId Group chat ID
      * @param string|null $sessionId Session ID
      * @return ApiResponse
@@ -572,7 +573,7 @@ class WhatsAppClient extends Component
 
     /**
      * Add participants to group
-     * 
+     *
      * @param string $chatId Group chat ID
      * @param array $participantIds Array of participant IDs
      * @param array $options Options for adding participants
@@ -590,7 +591,7 @@ class WhatsAppClient extends Component
 
     /**
      * Remove participants from group
-     * 
+     *
      * @param string $chatId Group chat ID
      * @param array $participantIds Array of participant IDs
      * @param string|null $sessionId Session ID
@@ -606,7 +607,7 @@ class WhatsAppClient extends Component
 
     /**
      * Promote participants to group admins
-     * 
+     *
      * @param string $chatId Group chat ID
      * @param array $participantIds Array of participant IDs
      * @param string|null $sessionId Session ID
@@ -622,7 +623,7 @@ class WhatsAppClient extends Component
 
     /**
      * Demote group admins to regular participants
-     * 
+     *
      * @param string $chatId Group chat ID
      * @param array $participantIds Array of participant IDs
      * @param string|null $sessionId Session ID
@@ -638,7 +639,7 @@ class WhatsAppClient extends Component
 
     /**
      * Set group subject/title
-     * 
+     *
      * @param string $chatId Group chat ID
      * @param string $subject New group subject
      * @param string|null $sessionId Session ID
@@ -654,7 +655,7 @@ class WhatsAppClient extends Component
 
     /**
      * Set group description
-     * 
+     *
      * @param string $chatId Group chat ID
      * @param string $description New group description
      * @param string|null $sessionId Session ID
@@ -670,7 +671,7 @@ class WhatsAppClient extends Component
 
     /**
      * Leave a group
-     * 
+     *
      * @param string $chatId Group chat ID
      * @param string|null $sessionId Session ID
      * @return ApiResponse
@@ -686,7 +687,7 @@ class WhatsAppClient extends Component
 
     /**
      * Block a contact
-     * 
+     *
      * @param string $contactId Contact ID
      * @param string|null $sessionId Session ID
      * @return ApiResponse
@@ -700,7 +701,7 @@ class WhatsAppClient extends Component
 
     /**
      * Unblock a contact
-     * 
+     *
      * @param string $contactId Contact ID
      * @param string|null $sessionId Session ID
      * @return ApiResponse
@@ -714,7 +715,7 @@ class WhatsAppClient extends Component
 
     /**
      * Get contact's about information
-     * 
+     *
      * @param string $contactId Contact ID
      * @param string|null $sessionId Session ID
      * @return ApiResponse
@@ -728,7 +729,7 @@ class WhatsAppClient extends Component
 
     /**
      * Get blocked contacts
-     * 
+     *
      * @param string|null $sessionId Session ID
      * @return ApiResponse
      */
@@ -741,7 +742,7 @@ class WhatsAppClient extends Component
 
     /**
      * Send location message
-     * 
+     *
      * @param string $chatId Chat ID
      * @param float $latitude Latitude
      * @param float $longitude Longitude
@@ -761,7 +762,7 @@ class WhatsAppClient extends Component
 
     /**
      * Send contact message
-     * 
+     *
      * @param string $chatId Chat ID
      * @param string $contactId Contact ID to share
      * @param array $options Send options
@@ -777,7 +778,7 @@ class WhatsAppClient extends Component
 
     /**
      * Send poll message
-     * 
+     *
      * @param string $chatId Chat ID
      * @param string $pollName Poll question
      * @param array $pollOptions Poll answer options
@@ -797,7 +798,7 @@ class WhatsAppClient extends Component
 
     /**
      * Reply to a message
-     * 
+     *
      * @param string $chatId Chat ID
      * @param string $messageId Message ID to reply to
      * @param string $contentType Content type
@@ -819,7 +820,7 @@ class WhatsAppClient extends Component
 
     /**
      * React to a message
-     * 
+     *
      * @param string $chatId Chat ID
      * @param string $messageId Message ID
      * @param string $reaction Emoji reaction (empty string to remove)
@@ -837,7 +838,7 @@ class WhatsAppClient extends Component
 
     /**
      * Delete a message
-     * 
+     *
      * @param string $chatId Chat ID
      * @param string $messageId Message ID
      * @param bool $forEveryone Delete for everyone
@@ -857,7 +858,7 @@ class WhatsAppClient extends Component
 
     /**
      * Download message media
-     * 
+     *
      * @param string $chatId Chat ID
      * @param string $messageId Message ID
      * @param string|null $sessionId Session ID
@@ -873,7 +874,7 @@ class WhatsAppClient extends Component
 
     /**
      * Get message information
-     * 
+     *
      * @param string $chatId Chat ID
      * @param string $messageId Message ID
      * @param string|null $sessionId Session ID
@@ -891,7 +892,7 @@ class WhatsAppClient extends Component
 
     /**
      * Send typing indicator
-     * 
+     *
      * @param string $chatId Chat ID
      * @param string|null $sessionId Session ID
      * @return ApiResponse
@@ -905,7 +906,7 @@ class WhatsAppClient extends Component
 
     /**
      * Send recording indicator
-     * 
+     *
      * @param string $chatId Chat ID
      * @param string|null $sessionId Session ID
      * @return ApiResponse
@@ -919,7 +920,7 @@ class WhatsAppClient extends Component
 
     /**
      * Stop typing/recording indicators
-     * 
+     *
      * @param string $chatId Chat ID
      * @param string|null $sessionId Session ID
      * @return ApiResponse
@@ -935,7 +936,7 @@ class WhatsAppClient extends Component
 
     /**
      * Set user status message
-     * 
+     *
      * @param string $status Status message
      * @param string|null $sessionId Session ID
      * @return ApiResponse
@@ -949,7 +950,7 @@ class WhatsAppClient extends Component
 
     /**
      * Set profile picture
-     * 
+     *
      * @param string $mimeType Image MIME type
      * @param string $data Base64 encoded image data
      * @param string|null $sessionId Session ID
@@ -965,7 +966,7 @@ class WhatsAppClient extends Component
 
     /**
      * Search messages
-     * 
+     *
      * @param string $query Search query
      * @param array $options Search options
      * @param string|null $sessionId Session ID
