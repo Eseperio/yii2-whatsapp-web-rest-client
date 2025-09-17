@@ -72,7 +72,7 @@ class WhatsAppClient extends Component
             throw new InvalidConfigException('The "baseUrl" property must be set.');
         }
         if (empty($this->apiKey)) {
-            throw new InvalidConfigException('The "apiKey" property must be set.');
+            Yii::warning('API key is not set. Requests will not be authenticated.', __CLASS__);;
         }
 
         // Inicializar sin baseUrl ni timeout (se aplican por request)
