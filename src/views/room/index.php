@@ -63,7 +63,7 @@ $this->title = 'WhatsApp Rooms';
             </div>
 
             <div class="form-group">
-                <?= Html::submitButton('Filter', ['class' => 'btn btn-primary']) ?>
+                <?= Html::submitButton('Filter', ['class' => 'btn btn-default']) ?>
                 <?= Html::a('Clear', ['index'], ['class' => 'btn btn-default']) ?>
             </div>
 
